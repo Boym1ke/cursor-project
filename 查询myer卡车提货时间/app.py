@@ -11,16 +11,9 @@ from PyQt5.QtGui import QFont
 import win32com.client
 import pythoncom
 import time
-import json
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 获取程序所在的目录路径
 PROGRAM_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 缓存配置
-CACHE_FILE = os.path.join(PROGRAM_DIR, "search_cache.json")
-CACHE_EXPIRY = 24 * 60 * 60  # 24小时的秒数
 
 # 简化日志配置
 logging.basicConfig(
@@ -33,186 +26,16 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-class Cache:
-    def __init__(self, cache_file=CACHE_FILE):
-        self.cache_file = cache_file
-        self.cache = self.load_cache()
-    
-    def load_cache(self):
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    cache = json.load(f)
-                # 清理过期缓存
-                current_time = time.time()
-                return {k: v for k, v in cache.items() 
-                       if current_time - v.get('timestamp', 0) < CACHE_EXPIRY}
-            return {}
-        except Exception as e:
-            logger.error(f"加载缓存失败: {str(e)}")
-            return {}
-    
-    def save_cache(self):
-        try:
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump(self.cache, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"保存缓存失败: {str(e)}")
-    
-    def get(self, key):
-        if key in self.cache:
-            data = self.cache[key]
-            if time.time() - data.get('timestamp', 0) < CACHE_EXPIRY:
-                return data.get('data')
-        return None
-    
-    def set(self, key, value):
-        self.cache[key] = {
-            'data': value,
-            'timestamp': time.time()
-        }
-        self.save_cache()
-
-class SearchThread(QThread):
-    result_ready = pyqtSignal(dict)
-    progress_update = pyqtSignal(int)
-    search_completed = pyqtSignal()
-    error_occurred = pyqtSignal(str)
-
-    def __init__(self, containers):
-        super().__init__()
-        self.containers = containers
-        self._outlook = None
-        self._namespace = None
-
-    def run(self):
-        try:
-            pythoncom.CoInitialize()
-            
-            # 连接 Outlook
-            self._outlook, self._namespace = connect_outlook()
-            if not self._outlook or not self._namespace:
-                raise Exception("无法连接到 Outlook")
-            
-            self.progress_update.emit(0)
-            log_error("开始搜索...")
-            
-            try:
-                inbox = self._namespace.GetDefaultFolder(6)
-                landside_folder = None
-                
-                # 查找 Landside update 文件夹
-                for folder in inbox.Folders:
-                    if folder.Name == "Landside update":
-                        landside_folder = folder
-                        break
-                
-                search_folder = landside_folder if landside_folder else inbox
-                scope = f"'{search_folder.FolderPath}'"
-                
-                total = len(self.containers)
-                for i, container in enumerate(self.containers):
-                    try:
-                        progress = int((i / total) * 100)
-                        self.progress_update.emit(progress)
-                        self.error_occurred.emit(f"正在搜索柜号 {container}...")
-                        
-                        # 使用高级搜索
-                        filter_str = (f"subject:'Appointment' AND body:'{container}'")
-                        search = self._namespace.AdvancedSearch(
-                            scope, 
-                            filter_str, 
-                            True,  # 搜索子文件夹
-                            "MySearch"  # 搜索标签
-                        )
-                        
-                        # 等待搜索完成
-                        while not search.SearchScope.IsSearchComplete:
-                            pythoncom.PumpWaitingMessages()
-                            time.sleep(0.1)
-                        
-                        results = search.Results
-                        if results.Count > 0:
-                            best_match = None
-                            for j in range(results.Count):
-                                message = results.Item(j+1)  # 索引从1开始
-                                try:
-                                    subject = message.Subject
-                                    if not ("Appointment Rescheduled" in subject or 
-                                           "Appointment Approved" in subject):
-                                        continue
-                                    
-                                    body = message.Body
-                                    if "APPOINTMENT REQUEST - APPROVED" in body:
-                                        requested_date = ""
-                                        rdc = ""
-                                        for line in body.split('\n'):
-                                            if "REQUESTED DATE:" in line:
-                                                requested_date = line.split("REQUESTED DATE:")[1].strip()
-                                            if "RDC:" in line:
-                                                rdc = line.split("RDC:")[1].strip()
-                                        
-                                        is_rescheduled = "Appointment Rescheduled" in subject
-                                        if not best_match or is_rescheduled:
-                                            best_match = {
-                                                'container': container,
-                                                'status': "已改期" if is_rescheduled else "已批准",
-                                                'date': requested_date,
-                                                'rdc': rdc
-                                            }
-                                            if is_rescheduled:
-                                                break
-                                except Exception as e:
-                                    continue
-                            
-                            self.result_ready.emit({
-                                'container': container,
-                                'result': best_match
-                            })
-                        else:
-                            self.result_ready.emit({
-                                'container': container,
-                                'result': None
-                            })
-                        
-                    except Exception as e:
-                        log_error(f"处理柜号 {container} 时出错: {str(e)}")
-                        continue
-                
-                self.progress_update.emit(100)
-                
-            except Exception as e:
-                error_msg = f"搜索过程出错: {str(e)}"
-                log_error(error_msg)
-                self.error_occurred.emit(error_msg)
-            
-        except Exception as e:
-            error_msg = f"搜索线程出错: {str(e)}"
-            log_error(error_msg)
-            self.error_occurred.emit(error_msg)
-        
-        finally:
-            self.search_completed.emit()
-            if self._namespace:
-                del self._namespace
-            if self._outlook:
-                del self._outlook
-            pythoncom.CoUninitialize()
-
 def get_log_path():
     """获取日志文件路径"""
     try:
-        # 尝试获取可执行文件所在目录
         if getattr(sys, 'frozen', False):
-            # 如果是打包后的程序
             program_dir = os.path.dirname(sys.executable)
         else:
-            # 如果是 Python 脚本
             program_dir = os.path.dirname(os.path.abspath(__file__))
         
         return os.path.join(program_dir, 'error.txt')
     except:
-        # 如果出错，使用当前目录
         return 'error.txt'
 
 def log_error(error_msg):
@@ -221,12 +44,11 @@ def log_error(error_msg):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         error_file = get_log_path()
         
-        # 确保目录存在
         os.makedirs(os.path.dirname(error_file), exist_ok=True)
         
         with open(error_file, 'a', encoding='utf-8') as f:
             f.write(f"\n[{timestamp}] ERROR:\n{error_msg}\n{'='*50}\n")
-            f.flush()  # 立即写入文件
+            f.flush()
     except Exception as e:
         print(f"写入错误日志失败: {str(e)}")
         print(f"尝试写入的路径: {get_log_path()}")
@@ -236,32 +58,15 @@ def connect_outlook(max_retries=3):
     for attempt in range(max_retries):
         try:
             log_error(f"尝试连接 Outlook (第 {attempt + 1} 次)")
-            
-            # 首次尝试前多等待一会
-            if attempt == 0:
-                time.sleep(5)  # 等待5秒确保 Outlook 完全加载
-                
-            outlook = win32com.client.Dispatch("Outlook.Application")
+            outlook = win32com.client.DispatchEx("Outlook.Application")
             namespace = outlook.GetNamespace("MAPI")
-            
-            # 验证连接和认证
-            try:
-                test = namespace.GetDefaultFolder(6)
-                if test:
-                    # 尝试获取收件箱中的一封邮件来验证权限
-                    if test.Items.Count > 0:
-                        _ = test.Items.GetFirst()
-                    return outlook, namespace
-            except Exception as auth_error:
-                log_error(f"认证检查失败: {str(auth_error)}")
-                raise
-                
+            return outlook, namespace
         except Exception as e:
             log_error(f"连接尝试 {attempt + 1} 失败: {str(e)}")
             if attempt < max_retries - 1:
-                time.sleep(3)  # 增加等待时间到3秒
+                time.sleep(1)
             else:
-                raise Exception("Outlook 认证失败，请确保 Outlook 已正确登录并且能正常收发邮件")
+                raise
     return None, None
 
 def check_outlook_availability():
@@ -275,13 +80,13 @@ def check_outlook_availability():
         pythoncom.CoUninitialize()
         return True
     except Exception as e:
-        log_error(f"Outlook 可用检查失败: {str(e)}")
+        log_error(f"Outlook 可用性检查失败: {str(e)}")
         return False
 
 def main():
     try:
         logger.info("程序开始运行")
-        log_error("程开始运行")
+        log_error("程序开始运行")
         
         # 创建应用实例
         app = QApplication(sys.argv)
@@ -522,7 +327,7 @@ class MyerQuery(QMainWindow):
             # 检查结果表格
             total_rows = self.result_table.rowCount()
             
-            # 只有在真的没找到任何结果时才显示提示
+            # 只有在真的没有找到任何结果时才显示提示
             if total_rows == 0:
                 QMessageBox.information(self, "搜索结果", "未找到任何匹配结果")
             
@@ -547,11 +352,11 @@ class MyerQuery(QMainWindow):
             if column == self.current_sort_column:
                 self.current_sort_order = Qt.DescendingOrder if self.current_sort_order == Qt.AscendingOrder else Qt.AscendingOrder
             else:
-                # 果是新列，设置为升序
+                # 如果是新列，设置为升序
                 self.current_sort_column = column
                 self.current_sort_order = Qt.AscendingOrder
             
-            # 获取所有行的数
+            # 获取所有行的数据
             rows = []
             for row in range(self.result_table.rowCount()):
                 row_data = []
@@ -575,6 +380,181 @@ class MyerQuery(QMainWindow):
             
         except Exception as e:
             self.show_error("排序失败", str(e))
+
+class SearchThread(QThread):
+    # 定义信号
+    result_ready = pyqtSignal(dict)
+    progress_update = pyqtSignal(int)
+    search_completed = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, containers):
+        super().__init__()
+        self.containers = containers
+        self._outlook = None
+        self._namespace = None
+
+    def run(self):
+        try:
+            pythoncom.CoInitialize()
+            
+            # 连接 Outlook
+            self._outlook, self._namespace = connect_outlook()
+            if not self._outlook or not self._namespace:
+                raise Exception("无法连接到 Outlook")
+            
+            self.progress_update.emit(0)
+            log_error("开始搜索...")
+            
+            try:
+                # 获取本地 PST 文件中的文件夹
+                stores = self._namespace.Stores
+                store_count = stores.Count
+                
+                # 查找本地存储
+                local_store = None
+                for i in range(1, store_count + 1):
+                    store = stores.Item(i)
+                    if "Local_Landside_Update" in store.DisplayName:
+                        local_store = store
+                        break
+                
+                if not local_store:
+                    raise Exception("未找到本地存储文件")
+                
+                # 获取根文件夹
+                root_folder = local_store.GetRootFolder()
+                
+                # 查找 Landside update 子文件夹
+                target_folder = None
+                for folder in root_folder.Folders:
+                    if folder.Name == "Landside update":
+                        target_folder = folder
+                        break
+                
+                if not target_folder:
+                    raise Exception("未找到 Landside update 文件夹")
+                
+                messages = target_folder.Items
+                if not messages:
+                    raise Exception("没有找到任何邮件")
+                
+                # 设置时间限制
+                cutoff_date = (datetime.now() - timedelta(days=120)).replace(hour=0, minute=0, second=0, microsecond=0)
+                
+                # 预先过滤邮件
+                self.error_occurred.emit("正在预处理邮件...")
+                filtered_messages = []
+                messages.Sort("[ReceivedTime]", True)
+                
+                for message in messages:
+                    try:
+                        received_time = message.ReceivedTime
+                        if isinstance(received_time, datetime):
+                            received_time = received_time.replace(tzinfo=None)
+                        if received_time < cutoff_date:
+                            continue
+                        
+                        subject = message.Subject
+                        if ("Appointment Rescheduled" in subject or 
+                            "Appointment Approved" in subject):
+                            filtered_messages.append({
+                                'message': message,
+                                'subject': subject,
+                                'body': message.Body,
+                                'received_time': received_time
+                            })
+                    except Exception as e:
+                        continue
+                
+                log_error(f"预处理后的邮件数量: {len(filtered_messages)}")
+                
+                # 创建柜号到结果的映射
+                container_map = {container: None for container in self.containers}
+                total = len(self.containers)
+                processed = 0
+                
+                # 处理每封邮件
+                for msg_data in filtered_messages:
+                    try:
+                        body = msg_data['body']
+                        subject = msg_data['subject']
+                        
+                        # 找出这封邮件匹配的所有柜号
+                        found_containers = [c for c in container_map.keys() 
+                                         if c in body and container_map[c] is None]
+                        
+                        if found_containers and "APPOINTMENT REQUEST - APPROVED" in body:
+                            # 提取邮件信息
+                            requested_date = ""
+                            rdc = ""
+                            for line in body.split('\n'):
+                                if "REQUESTED DATE:" in line:
+                                    requested_date = line.split("REQUESTED DATE:")[1].strip()
+                                if "RDC:" in line:
+                                    rdc = line.split("RDC:")[1].strip()
+                                if requested_date and rdc:
+                                    break
+                            
+                            is_rescheduled = "Appointment Rescheduled" in subject
+                            
+                            # 更新所有匹配的柜号
+                            for container in found_containers:
+                                if not container_map[container] or is_rescheduled:
+                                    result = {
+                                        'container': container,
+                                        'status': "已改期" if is_rescheduled else "已批准",
+                                        'date': requested_date,
+                                        'rdc': rdc
+                                    }
+                                    container_map[container] = result
+                                    self.result_ready.emit({
+                                        'container': container,
+                                        'result': result
+                                    })
+                                    processed += 1
+                                    
+                                    progress = int((processed / total) * 100)
+                                    self.progress_update.emit(progress)
+                                    self.error_occurred.emit(f"已处理: {processed}/{total}")
+                        
+                        # 如果所有柜号都找到了结果，提前结束
+                        if all(v is not None for v in container_map.values()):
+                            break
+                            
+                    except Exception as e:
+                        continue
+                
+                # 处理未找到结果的柜号
+                for container, result in container_map.items():
+                    if result is None:
+                        self.result_ready.emit({
+                            'container': container,
+                            'result': None
+                        })
+                
+                self.progress_update.emit(100)
+                
+            except Exception as e:
+                error_msg = f"搜索过程出错: {str(e)}"
+                log_error(error_msg)
+                self.error_occurred.emit(error_msg)
+            
+            finally:
+                self.search_completed.emit()
+                
+        except Exception as e:
+            error_msg = f"搜索线程出错: {str(e)}"
+            log_error(error_msg)
+            self.error_occurred.emit(error_msg)
+            self.search_completed.emit()
+        
+        finally:
+            if self._namespace:
+                del self._namespace
+            if self._outlook:
+                del self._outlook
+            pythoncom.CoUninitialize()
 
 if __name__ == '__main__':
     try:
