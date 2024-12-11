@@ -1,0 +1,303 @@
+/* 重置样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 播放器基础样式 */
+.music-player {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    background: rgba(255, 255, 255, 0.01) !important;
+    backdrop-filter: blur(30px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(200%) !important;
+    border-radius: 16px;
+    box-shadow: 
+        0 4px 30px rgba(0, 0, 0, 0.01),
+        inset 0 0 0 0.3px rgba(255, 255, 255, 0.05);
+    z-index: 999999 !important;
+    padding: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* 播放器内容区域 */
+.player-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+/* 顶部控制按钮容器 */
+.player-controls-top {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+}
+
+/* 最小化按钮 */
+.hide-button {
+    width: 24px;
+    height: 24px;
+    background-color: rgba(0, 0, 0, 0.2);
+    color: #000000;
+    border: none !important;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    padding: 0;
+    transition: all 0.2s ease;
+}
+
+.hide-button:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
+.hide-button::before {
+    content: '-';
+    transition: transform 0.3s ease;
+}
+
+/* 歌曲信息 */
+.song-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.01) !important;
+    padding: 8px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px) !important;
+}
+
+.cover-art {
+    width: 45px;
+    height: 45px;
+    border-radius: 6px;
+    object-fit: cover;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+}
+
+.track-info {
+    flex-grow: 1;
+}
+
+#song-title {
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: #000000 !important;
+    font-size: 13px;
+}
+
+#artist-name {
+    font-size: 11px;
+    color: #000000 !important;
+}
+
+/* 歌词容器 */
+.lyrics-container {
+    height: 72px;
+    margin: 4px 0;
+    text-align: center;
+    padding: 8px 6px;
+    background: rgba(255, 255, 255, 0.01) !important;
+    border-radius: 10px;
+    backdrop-filter: blur(10px) !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.lyrics-wrapper {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+    gap: 4px;
+}
+
+.lyrics-line {
+    font-size: 13px;
+    line-height: 20px;
+    height: 20px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    color: rgba(0, 0, 0, 0.35) !important;
+    width: 100%;
+    padding: 0 20px;
+    transform: scale(0.95);
+    opacity: 0.5;
+}
+
+.lyrics-current {
+    color: #000000 !important;
+    font-weight: 500;
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* 控制按钮 */
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.01) !important;
+    border-radius: 12px;
+    backdrop-filter: blur(10px) !important;
+}
+
+.control-btn {
+    background: transparent !important;
+    border: none !important;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.control-btn svg {
+    color: #000000;
+    transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* 进度条 */
+.progress-bar {
+    flex-grow: 1;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1) !important;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+#progress {
+    height: 100%;
+    background: #000000 !important;
+    width: 0%;
+    position: relative;
+    transition: width 0.1s linear;
+}
+
+#current-time, #duration {
+    font-size: 10px;
+    color: #000000 !important;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+/* 最小化状态 */
+.player-hidden {
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(30px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(200%) !important;
+    border-radius: 50% !important;
+    cursor: pointer;
+}
+
+.player-hidden:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.player-hidden .player-content {
+    display: none;
+}
+
+.player-hidden .hide-button {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: transparent;
+    width: 100%;
+    height: 100%;
+}
+
+.player-hidden .hide-button::before {
+    content: '♫';
+    font-size: 20px;
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+    .music-player {
+        background: rgba(0, 0, 0, 0.01) !important;
+    }
+    
+    #song-title,
+    #artist-name,
+    .lyrics-line,
+    .lyrics-current,
+    .control-btn svg,
+    #current-time,
+    #duration,
+    .hide-button {
+        color: #ffffff !important;
+    }
+    
+    .progress-bar {
+        background: rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    #progress {
+        background: #ffffff !important;
+    }
+
+    .player-hidden {
+        background: rgba(0, 0, 0, 0.8) !important;
+    }
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .music-player {
+        width: calc(100% - 20px);
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+    }
+
+    .player-hidden {
+        width: 40px !important;
+        right: 10px;
+        left: auto;
+    }
+}
+
+/* 确保所有元素边框和阴影正确 */
+.music-player * {
+    border: none !important;
+    text-shadow: none !important;
+}

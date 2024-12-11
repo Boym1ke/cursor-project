@@ -1,0 +1,6 @@
+.cursor/
+.cursor-cache/
+*.cursor-log
+.DS_Store
+node_modules/
+.env

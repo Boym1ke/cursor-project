@@ -1,0 +1,47 @@
+<div id="floating-player" class="music-player">
+    <div class="player-controls-top">
+        <button id="hide-player" class="hide-button">-</button>
+    </div>
+    <div class="player-content">
+        <div class="song-info">
+            <img src="" alt="封面" id="cover-art" class="cover-art">
+            <div class="track-info">
+                <div id="song-title">歌曲名称</div>
+                <div id="artist-name">歌手名称</div>
+            </div>
+        </div>
+        
+        <div class="lyrics-container">
+            <div class="lyrics-wrapper">
+                <!-- 歌词将由JavaScript动态插入 -->
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="prev-btn" class="control-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 5l-7 7 7 7"/>
+                    <line x1="20" y1="5" x2="20" y2="19"/>
+                </svg>
+            </button>
+            <button id="play-btn" class="control-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="play-icon">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="pause-icon" style="display: none;">
+                    <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
+                </svg>
+            </button>
+            <button id="next-btn" class="control-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 5l7 7-7 7"/>
+                    <line x1="4" y1="5" x2="4" y2="19"/>
+                </svg>
+            </button>
+            <div class="progress-bar">
+                <div id="progress"></div>
+            </div>
+            <span id="current-time">0:00</span> / <span id="duration">0:00</span>
+        </div>
+    </div>
+</div>
