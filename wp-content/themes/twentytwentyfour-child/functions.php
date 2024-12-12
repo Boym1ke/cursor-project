@@ -98,29 +98,22 @@ function add_debug_info() {
 }
 add_action('wp_footer', 'add_debug_info', 1);
 
-// 添加以下代码到 function.php
-
-function get_music_playlist() {
-    // 返回音乐��表数据
-    wp_localize_script('player-script', 'musicData', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'playlist' => array(
-            array(
-                'title' => '您的歌曲名称',
-                'artist' => '歌手名称',
-                'url' => get_template_directory_uri() . '/static/music/您的音乐文件.mp3',
-                'cover' => get_template_directory_uri() . '/static/images/您的封面图片.jpg',
-                'lyrics' => get_template_directory_uri() . '/static/lyrics/您的歌词文件.lrc'
-            ),
-            // 可以添加更多歌曲...
-        )
-    ));
+// ��加欢迎动画
+function add_welcome_animation() {
+    if (is_front_page()) {
+        ?>
+        <div class="welcome-container">
+            <img src="<?php echo get_stylesheet_directory_uri(); ?>/static/images/squirtle.gif" alt="Welcome" class="welcome-gif">
+            <div class="falling-text-container">
+                <?php
+                $characters = array('欢','迎','来','到','我','的','网','站');
+                foreach ($characters as $index => $char) {
+                    echo "<span class='falling-character' style='animation-delay: {$index}s;'>{$char}</span>";
+                }
+                ?>
+            </div>
+        </div>
+        <?php
+    }
 }
-
-// 注册脚本和样式
-function enqueue_player_scripts() {
-    wp_enqueue_style('player-style', get_template_directory_uri() . '/static/style.css');
-    wp_enqueue_script('player-script', get_template_directory_uri() . '/static/player.js', array('jquery'), '1.0', true);
-    get_music_playlist();
-}
-add_action('wp_enqueue_scripts', 'enqueue_player_scripts');
+add_action('wp_body_open', 'add_welcome_animation');
